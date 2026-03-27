@@ -147,10 +147,14 @@ export class MemoryRetriever {
   }
 
   private scoreMemory(mem: any, pathwayWeight: number, currentDay: number): number {
-    const strength = (mem.stm_strength ?? 0) * 0.6 + (mem.ltm_strength ?? 0) * 0.4;
+    const stm = Math.max(0, Math.min(1, mem.stm_strength ?? 0));
+    const ltm = Math.max(0, Math.min(1, mem.ltm_strength ?? 0));
+    const strength = stm * 0.6 + ltm * 0.4;
     const recency = Math.exp(-((currentDay - (mem.day ?? currentDay)) / 10));
-    const emotionalBoost = 1 + (mem.emotion_arousal || 0) * 0.5;
-    const importanceBoost = 1 + (mem.importance || 0) * 0.3;
+    const arousal = Math.max(0, Math.min(1, mem.emotion_arousal || 0));
+    const importance = Math.max(0, Math.min(1, mem.importance || 0));
+    const emotionalBoost = 1 + arousal * 0.5;
+    const importanceBoost = 1 + importance * 0.3;
     return pathwayWeight * strength * recency * emotionalBoost * importanceBoost;
   }
 

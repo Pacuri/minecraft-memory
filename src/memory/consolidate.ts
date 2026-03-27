@@ -134,9 +134,14 @@ export class ConsolidationEngine {
           const id = uuidv4();
           const entities = Array.isArray(ep.entities) ? ep.entities : [];
           const tags = Array.isArray(ep.tags) ? ep.tags : [];
-          const valence = typeof ep.emotion_valence === 'number' ? ep.emotion_valence : 0;
-          const arousal = typeof ep.emotion_arousal === 'number' ? ep.emotion_arousal : 0.3;
-          const importance = typeof ep.importance === 'number' ? ep.importance : 5;
+          // Clamp values to valid ranges
+          const rawValence = typeof ep.emotion_valence === 'number' ? ep.emotion_valence : 0;
+          const valence = Math.max(-1, Math.min(1, rawValence));
+          const rawArousal = typeof ep.emotion_arousal === 'number' ? ep.emotion_arousal : 0.3;
+          const arousal = Math.max(0, Math.min(1, rawArousal));
+          const rawImportance = typeof ep.importance === 'number' ? ep.importance : 5;
+          // Normalize importance: if LLM returns 1-10 scale, divide by 10
+          const importance = rawImportance > 1 ? Math.max(0, Math.min(1, rawImportance / 10)) : Math.max(0, Math.min(1, rawImportance));
 
           insertStmt.run(
             id,
@@ -168,6 +173,11 @@ export class ConsolidationEngine {
       const existingSemanticsText = existingSemantics
         .map((s) => `[${s.category}] ${s.content} (confidence: ${s.confidence})`)
         .join('\n');
+
+      // Get known agent IDs for contradiction detection
+      const allTargets = (this.db.prepare(
+        `SELECT DISTINCT target_id FROM relationships WHERE agent_id = ?`
+      ).all(agentId) as any[]).map((r: any) => r.target_id as string);
 
       const dayEpisodesText = createdEpisodes
         .map((ep) => `- ${ep.summary} (tags: ${ep.tags.join(', ')})`)
@@ -221,10 +231,45 @@ export class ConsolidationEngine {
             // Insert new semantic memory
             const id = uuidv4();
             const category = fact.category ?? 'fact';
-            const confidence = typeof fact.confidence === 'number' ? fact.confidence : 0.5;
+            const confidence = typeof fact.confidence === 'number' ? Math.min(1.0, Math.max(0, fact.confidence)) : 0.5;
             const sourceEpisodes = fact.source_episode_summary
               ? [fact.source_episode_summary]
               : [];
+
+            // Contradiction detection: if new fact is about an entity and
+            // contradicts existing facts about that entity, reduce old confidence
+            const contentLower = fact.content.toLowerCase();
+            const negativeMarkers = ['not', 'never', 'don\'t', 'cannot', 'untrust', 'dishonest', 'stole', 'steal', 'betray', 'lied', 'lie', 'no longer'];
+            const positiveMarkers = ['trust', 'reliable', 'generous', 'helpful', 'cooperat', 'honest', 'dependable', 'kind'];
+            const isNegative = negativeMarkers.some(m => contentLower.includes(m));
+            const isPositive = positiveMarkers.some(m => contentLower.includes(m)) && !isNegative;
+
+            if (isNegative || isPositive) {
+              // Find existing semantic memories that contradict this one
+              const existingFacts = this.db.prepare(
+                `SELECT id, content, confidence FROM semantic_memory WHERE agent_id = ? AND category = 'fact'`
+              ).all(agentId) as Array<{ id: string; content: string; confidence: number }>;
+
+              for (const ef of existingFacts) {
+                const efLower = ef.content.toLowerCase();
+                // Check if they share an entity reference
+                const sharedEntity = allTargets?.some((t: string) =>
+                  contentLower.includes(t.toLowerCase()) && efLower.includes(t.toLowerCase())
+                );
+                if (!sharedEntity) continue;
+
+                const efIsNeg = negativeMarkers.some(m => efLower.includes(m));
+                const efIsPos = positiveMarkers.some(m => efLower.includes(m)) && !efIsNeg;
+
+                // If opposing sentiment about the same entity, reduce old confidence
+                if ((isNegative && efIsPos) || (isPositive && efIsNeg)) {
+                  const reducedConf = Math.max(0.1, ef.confidence - 0.3);
+                  this.db.prepare(
+                    `UPDATE semantic_memory SET confidence = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+                  ).run(reducedConf, ef.id);
+                }
+              }
+            }
 
             this.db
               .prepare(
@@ -256,10 +301,33 @@ export class ConsolidationEngine {
     // ---------------------------------------------------------------
     try {
       const encounteredAgents = new Set<string>();
+      // Pull entities from raw buffer entries
       for (const entry of dayEntries) {
         for (const entity of entry.entities) {
           if (entity !== agentId) encounteredAgents.add(entity);
         }
+      }
+      // Also pull entities from consolidated episodes (LLM may extract new ones)
+      for (const ep of createdEpisodes) {
+        for (const entity of ep.entities) {
+          if (entity !== agentId && entity !== agentName) encounteredAgents.add(entity);
+        }
+      }
+      // Also scan episode summaries for known agent names/ids
+      const allKnownAgents = (this.db.prepare(
+        `SELECT DISTINCT agent_id FROM relationships WHERE agent_id = ? OR target_id = ?`
+      ).all(agentId, agentId) as any[]).map(r => r.agent_id);
+      const allTargets = (this.db.prepare(
+        `SELECT DISTINCT target_id FROM relationships WHERE agent_id = ?`
+      ).all(agentId) as any[]).map(r => r.target_id);
+      for (const targetId of allTargets) {
+        if (targetId === agentId) continue;
+        const mentioned = createdEpisodes.some(ep =>
+          ep.summary.toLowerCase().includes(targetId.toLowerCase())
+        ) || dayEntries.some(entry =>
+          entry.content.toLowerCase().includes(targetId.toLowerCase())
+        );
+        if (mentioned) encounteredAgents.add(targetId);
       }
 
       const dayEpisodesText = createdEpisodes
