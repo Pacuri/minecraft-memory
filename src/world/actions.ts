@@ -558,7 +558,10 @@ export function resolveAction(
         };
         break;
       }
-      const destination = target as LocationId;
+      // Normalize location name (LLM may return "forest" instead of "FOREST")
+      const VALID_LOCATIONS: LocationId[] = ['RIVER', 'FOREST', 'CAVE', 'FIELD', 'HILLTOP'];
+      const normalized = target.toUpperCase() as LocationId;
+      const destination = VALID_LOCATIONS.includes(normalized) ? normalized : loc;
       result = {
         success: true,
         description: `${agent.agent_id} moved from ${loc} to ${destination}`,

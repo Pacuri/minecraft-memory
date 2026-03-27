@@ -77,7 +77,7 @@ export class IdentityManager {
     `);
 
     this.stmtLogConsolidation = this.db.prepare(`
-      INSERT INTO consolidation_log (agent_id, day, type, input_count, output_summary)
+      INSERT INTO consolidation_log (agent_id, day, type, summary, stats)
       VALUES (?, ?, 'identity', ?, ?)
     `);
 

@@ -13,7 +13,7 @@ try {
 
 const MODEL_MAP: Record<string, string> = {
   haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-6-20250516',
+  sonnet: 'claude-sonnet-4-5-20241022',
 };
 
 export class LLMClient {
