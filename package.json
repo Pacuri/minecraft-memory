@@ -15,10 +15,16 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "better-sqlite3": "^12.8.0",
     "hpagent": "^1.2.0",
     "https-proxy-agent": "^8.0.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
-    "undici": "^7.24.6"
+    "undici": "^7.24.6",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/uuid": "^10.0.0"
   }
 }
