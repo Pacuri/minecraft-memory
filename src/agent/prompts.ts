@@ -259,6 +259,7 @@ export function buildIdentityPrompt(
 
 const ACTION_DESCRIPTIONS: Record<ActionType, string> = {
   gather_food: 'Forage for berries, roots, or other food nearby',
+  gather_water: 'Collect fresh water from the river',
   gather_wood: 'Collect wood for building or fuel',
   gather_stone: 'Mine or gather stone for construction',
   fish: 'Fish in the river for food',
@@ -279,7 +280,7 @@ function getActionDescriptions(): Map<ActionType, string> {
 }
 
 const LOCATION_ACTIONS: Record<string, ActionType[]> = {
-  RIVER: ['fish', 'gather_food', 'move', 'talk', 'share', 'trade', 'rest'],
+  RIVER: ['fish', 'gather_water', 'gather_food', 'move', 'talk', 'share', 'trade', 'rest'],
   FOREST: ['gather_food', 'gather_wood', 'move', 'talk', 'share', 'trade', 'rest'],
   CAVE: ['gather_stone', 'craft_tool', 'move', 'talk', 'share', 'trade', 'rest'],
   FIELD: ['farm_plant', 'farm_harvest', 'gather_food', 'move', 'talk', 'share', 'trade', 'rest'],

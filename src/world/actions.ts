@@ -92,6 +92,31 @@ export function resolveAction(
       break;
     }
 
+    case 'gather_water': {
+      if (loc !== 'RIVER') {
+        result = {
+          success: false,
+          description: `${agent.agent_id} tried to gather water but is not at RIVER`,
+          inventory_changes: {},
+          health_change: 0,
+          morale_change: 0,
+          event: makeEvent(day, tick, agent.agent_id, loc, 'gather_water: wrong location', 'failure'),
+        };
+        break;
+      }
+      const yield_ = 3;
+      inv.water += yield_;
+      result = {
+        success: true,
+        description: `${agent.agent_id} collected ${yield_} water at RIVER`,
+        inventory_changes: { water: yield_ },
+        health_change: 0,
+        morale_change: 0,
+        event: makeEvent(day, tick, agent.agent_id, loc, `gather_water: collected ${yield_} water`, 'success'),
+      };
+      break;
+    }
+
     case 'gather_wood': {
       if (loc !== 'FOREST') {
         result = {

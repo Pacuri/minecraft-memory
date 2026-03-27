@@ -50,6 +50,7 @@ export interface WorldEvent {
 
 export type ActionType =
   | 'gather_food'
+  | 'gather_water'
   | 'gather_wood'
   | 'gather_stone'
   | 'fish'
