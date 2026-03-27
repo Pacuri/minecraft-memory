@@ -16,6 +16,36 @@ const MODEL_MAP: Record<string, string> = {
   sonnet: 'claude-sonnet-4-5-20241022',
 };
 
+/**
+ * Try to extract OAuth token from macOS keychain.
+ * Returns the token string or null if not on macOS / not available.
+ */
+function getOAuthToken(): string | null {
+  try {
+    const { execSync } = require('child_process');
+    const raw = execSync(
+      'security find-generic-password -s "Claude Code-credentials" -w',
+      { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] },
+    ).trim();
+    const parsed = JSON.parse(raw);
+    const token = parsed?.claudeAiOauth?.accessToken;
+    if (token) {
+      console.log('[LLMClient] Using OAuth token from macOS keychain');
+      return token;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Resolve the API key: explicit arg > env var > OAuth keychain.
+ */
+function resolveApiKey(explicit?: string): string | undefined {
+  if (explicit) return explicit;
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+  return getOAuthToken() ?? undefined;
+}
+
 export class LLMClient {
   private client: Anthropic;
   private callCount = 0;
@@ -23,9 +53,13 @@ export class LLMClient {
   private totalOutputTokens = 0;
 
   constructor(apiKey?: string) {
-    this.client = new Anthropic({
-      apiKey: apiKey || process.env.ANTHROPIC_API_KEY,
-    });
+    const key = resolveApiKey(apiKey);
+    if (!key) {
+      throw new Error(
+        'No API key found. Set ANTHROPIC_API_KEY or run on macOS with Claude Code signed in.',
+      );
+    }
+    this.client = new Anthropic({ apiKey: key });
   }
 
   /**
